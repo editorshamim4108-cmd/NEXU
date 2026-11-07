@@ -24,16 +24,43 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Cache Release Signing Keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.jarvis-keystore
+          key: jarvis-release-keystore-v1
+
+      - name: Ensure Signing Keystore Exists
+        run: |
+          mkdir -p ~/.jarvis-keystore
+          if [ ! -f ~/.jarvis-keystore/jarvis-release.jks ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.jarvis-keystore/jarvis-release.jks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias jarvis \
+              -storepass jarvis2026 \
+              -keypass jarvis2026 \
+              -dname "CN=JARVIS AI Assistant, OU=Mobile, O=BossAI, L=Dhaka, S=Dhaka, C=BD"
+          fi
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+      - name: Build Signed Release APK
+        env:
+          JARVIS_KEYSTORE_PATH: /home/runner/.jarvis-keystore/jarvis-release.jks
+          JARVIS_KEYSTORE_PASSWORD: jarvis2026
+          JARVIS_KEY_ALIAS: jarvis
+          JARVIS_KEY_PASSWORD: jarvis2026
+        run: gradle assembleRelease --no-daemon
 
       - name: Prepare Installable JARVIS.apk
-        run: cp app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+        run: |
+          APK_SRC=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          cp "$APK_SRC" JARVIS.apk
+          ls -lh JARVIS.apk
 
       - name: Upload Ready-to-Install JARVIS APK (Artifact)
         uses: actions/upload-artifact@v4
@@ -41,15 +68,23 @@ jobs:
           name: JARVIS-Android-APK
           path: JARVIS.apk
 
-      # ফোন থেকে সরাসরি ডাউনলোডের জন্য Release-এ APK দেওয়া হয়:
-      # https://github.com/editorshamim4108-cmd/NEXU/releases/download/jarvis-latest/JARVIS.apk
-      - name: Publish APK to GitHub Release (direct download)
+      - name: Publish Signed APK to GitHub Release (Direct Mobile Download)
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view jarvis-latest >/dev/null 2>&1 || \
+          NOTES="📲 **মোবাইলে সরাসরি ডাউনলোড ও ইনস্টল করুন:**
+          1. নিচের **JARVIS.apk** ফাইলে ট্যাপ করে ডাউনলোড করুন।
+          2. ডাউনলোড শেষে ফাইলটিতে ট্যাপ করে **Install** চাপুন।
+          3. 'Install unknown apps' চাইলে **Allow** দিন, আর Google Play Protect পপ-আপ এলে **More details ➔ Install anyway** ট্যাপ করুন।"
+
+          if gh release view jarvis-latest >/dev/null 2>&1; then
+            gh release edit jarvis-latest \
+              --title "JARVIS Mobile App — Ready to Install APK (v2.0)" \
+              --notes "$NOTES"
+          else
             gh release create jarvis-latest \
-              --title "JARVIS Android App — Latest APK" \
-              --notes "ফোনে JARVIS.apk ডাউনলোড করে ইনস্টল করুন। ইনস্টলের সময় 'Install unknown apps' অনুমতি চাইলে Allow দিন।"
+              --title "JARVIS Mobile App — Ready to Install APK (v2.0)" \
+              --notes "$NOTES"
+          fi
           gh release upload jarvis-latest JARVIS.apk --clobber
