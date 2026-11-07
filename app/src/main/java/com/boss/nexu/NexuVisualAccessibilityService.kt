@@ -2,18 +2,29 @@ package com.boss.nexu
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Build
-import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 class NexuVisualAccessibilityService : AccessibilityService() {
 
     companion object {
+        @Volatile
         var instance: NexuVisualAccessibilityService? = null
+            private set
+
+        @Volatile
+        var lastExternalScreenText: String = ""
             private set
 
         fun isServiceConnected(): Boolean = instance != null
     }
+
+    private val ignoredPackages = setOf(
+        "com.android.systemui",
+        "com.google.android.inputmethod.latin",
+        "com.samsung.android.honeyboard",
+        "com.touchtype.swiftkey"
+    )
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -21,7 +32,24 @@ class NexuVisualAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Live UI inspection handled on-demand when Boss gives voice instructions
+        val pkg = event?.packageName?.toString() ?: return
+        if (pkg == packageName || ignoredPackages.contains(pkg)) return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        ) {
+            try {
+                val root = rootInActiveWindow ?: return
+                val rootPkg = root.packageName?.toString().orEmpty()
+                if (rootPkg != packageName && !ignoredPackages.contains(rootPkg)) {
+                    val collected = mutableListOf<String>()
+                    collectNodeText(root, collected, 0)
+                    val joined = collected.distinct().joinToString(". ").trim()
+                    if (joined.length > 8) {
+                        lastExternalScreenText = joined.take(2500)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onInterrupt() {}
@@ -34,19 +62,51 @@ class NexuVisualAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * স্ক্রিনের সব দৃশ্যমান লেখা (Screen Intelligence & Smart Read Aloud) সংগ্রহ করে
+     * অন্য অ্যাপের স্ক্রিনে থাকা দৃশ্যমান লেখা পড়ে (Floating Mode বা সদ্য দেখা অ্যাপ উভয় ক্ষেত্রেই কাজ করে)
      */
     fun readVisibleScreenText(): String {
-        val rootNode = rootInActiveWindow ?: return ""
-        // নিজের (JARVIS) অ্যাপের স্ক্রিন পড়বে না — অন্য অ্যাপ সামনে থাকলেই শুধু তার লেখা
-        if (rootNode.packageName?.toString() == packageName) return ""
-        val collected = mutableListOf<String>()
-        collectNodeText(rootNode, collected)
-        return collected.distinct().joinToString(". ")
+        try {
+            for (win in windows) {
+                val root = win.root ?: continue
+                val pkg = root.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty() && pkg != packageName && !ignoredPackages.contains(pkg)) {
+                    val collected = mutableListOf<String>()
+                    collectNodeText(root, collected, 0)
+                    val text = collected.distinct().joinToString(". ").trim()
+                    if (text.length > 8) {
+                        lastExternalScreenText = text.take(2500)
+                        return lastExternalScreenText
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                val pkg = rootNode.packageName?.toString().orEmpty()
+                if (pkg != packageName && !ignoredPackages.contains(pkg)) {
+                    val collected = mutableListOf<String>()
+                    collectNodeText(rootNode, collected, 0)
+                    val text = collected.distinct().joinToString(". ").trim()
+                    if (text.length > 8) {
+                        lastExternalScreenText = text.take(2500)
+                        return lastExternalScreenText
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return lastExternalScreenText
     }
 
-    private fun collectNodeText(node: AccessibilityNodeInfo?, list: MutableList<String>) {
-        if (node == null) return
+    private fun collectNodeText(
+        node: AccessibilityNodeInfo?,
+        list: MutableList<String>,
+        depth: Int
+    ) {
+        if (node == null || depth > 28 || list.size > 120) return
+        if (!node.isVisibleToUser) return
         val text = node.text?.toString()?.trim()
         val desc = node.contentDescription?.toString()?.trim()
         if (!text.isNullOrEmpty() && text.length > 1) {
@@ -54,14 +114,12 @@ class NexuVisualAccessibilityService : AccessibilityService() {
         } else if (!desc.isNullOrEmpty() && desc.length > 1) {
             list.add(desc)
         }
-        for (i in 0 until node.childCount) {
-            collectNodeText(node.getChild(i), list)
+        val count = node.childCount
+        for (i in 0 until count) {
+            collectNodeText(node.getChild(i), list, depth + 1)
         }
     }
 
-    /**
-     * স্ক্রিনে নিচে স্ক্রল করে (Smart Read Aloud & Auto Scroll)
-     */
     fun scrollDownScreen(): Boolean {
         val rootNode = rootInActiveWindow ?: return false
         val scrollable = findScrollableNode(rootNode) ?: return false
@@ -78,56 +136,6 @@ class NexuVisualAccessibilityService : AccessibilityService() {
         return null
     }
 
-    /**
-     * নির্দিষ্ট নামের বাটনে বা অপশনে দৃশ্যমানভাবে ক্লিক করে
-     */
-    fun clickNodeByText(targetText: String): Boolean {
-        val rootNode = rootInActiveWindow ?: return false
-        val nodes = rootNode.findAccessibilityNodeInfosByText(targetText)
-        for (node in nodes) {
-            if (node.isClickable) {
-                return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            }
-            var parent = node.parent
-            while (parent != null) {
-                if (parent.isClickable) {
-                    return parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                }
-                parent = parent.parent
-            }
-        }
-        return false
-    }
-
-    /**
-     * টেক্সট বক্সে (যেমন WhatsApp, Gemini বা Search বারে) দৃশ্যমানভাবে টেক্সট টাইপ করে
-     */
-    fun typeIntoFocusedOrFirstInput(textToType: String): Boolean {
-        val rootNode = rootInActiveWindow ?: return false
-        val inputNode = findEditableNode(rootNode) ?: return false
-        val args = Bundle().apply {
-            putCharSequence(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                textToType
-            )
-        }
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        return inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-    }
-
-    private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (node.isEditable) return node
-        for (i in 0 until node.childCount) {
-            val found = findEditableNode(node.getChild(i))
-            if (found != null) return found
-        }
-        return null
-    }
-
-    /**
-     * Android 9+ এ সরাসরি নিরাপদ ভয়েস ফোন লক (PIN/Fingerprint অক্ষুণ্ণ রেখে)
-     */
     fun lockPhoneScreen(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)

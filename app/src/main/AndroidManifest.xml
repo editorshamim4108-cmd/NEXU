@@ -2,21 +2,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ভয়েস, ব্যাকগ্রাউন্ড ওয়েক-ওয়ার্ড সার্ভিস ও অটো-স্টার্ট পারমিশন -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- ইনস্টল করা সব অ্যাপ ও AI অ্যাপ খুঁজে বের করার অনুমতি -->
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.flash"
+        android:required="false" />
+
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
@@ -32,49 +32,44 @@
 
     <application
         android:allowBackup="true"
-        android:label="JARVIS"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         tools:targetApi="34">
 
-        <!-- মূল কমান্ড ডেক অ্যাক্টিভিটি (লক স্ক্রিন ও ব্যাকগ্রাউন্ড থেকে পপ-আপ সমর্থিত) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:screenOrientation="portrait"
-            android:theme="@android:style/Theme.Material.NoActionBar">
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- "Hey Boss" Always-On Background Wake-Word & Persistent Foreground Service -->
+        <!-- অন্য অ্যাপের ওপর ভাসমান JARVIS বাটন (Floating Mode) -->
         <service
-            android:name=".NexuVoiceForegroundService"
+            android:name=".JarvisFloatingService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_voice_screen_reader_overlay" />
+        </service>
 
-        <!-- ফোন রিস্টার্ট বা অন হলে নিজে থেকে NEXU চালু হওয়ার রিসিভার -->
-        <receiver
-            android:name=".NexuBootReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Real-Time Visual Phone Control & Smart Read Aloud Accessibility Service -->
+        <!-- JARVIS Screen Vision (স্ক্রিন পড়ে বাংলায় বা ইংরেজিতে অনুবাদ ও ভয়েস লক) -->
         <service
             android:name=".NexuVisualAccessibilityService"
             android:exported="false"
-            android:label="NEXU Live Visual Control"
+            android:label="JARVIS Screen Vision"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -83,21 +78,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/nexu_accessibility_config" />
         </service>
-
-        <!-- Voice Phone Lock Device Admin Receiver -->
-        <receiver
-            android:name=".NexuDeviceAdminReceiver"
-            android:description="@string/app_name"
-            android:exported="true"
-            android:label="NEXU Phone Lock Manager"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin_policies" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
 
     </application>
 
