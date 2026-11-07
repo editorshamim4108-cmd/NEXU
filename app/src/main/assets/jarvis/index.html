@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="bn" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JARVIS (জার্ভিস) — Minimalist Hands-Free AI Assistant (Screen Vision + 3-Element Failover)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-black: #050508;
+      --panel-dark: #0D0E17;
+      --neon-purple: #B026FF;
+      --electric-blue: #0066FF;
+      --cyber-cyan: #00F0FF;
+      --status-green: #00FF9D;
+    }
+    body {
+      background: radial-gradient(circle at 50% 35%, #0D0A1E 0%, #050508 75%);
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @keyframes orbPulseActive {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 45px #00F0FF, 0 0 90px #B026FF, inset 0 0 30px #00F0FF;
+      }
+      50% {
+        transform: scale(1.10);
+        box-shadow: 0 0 70px #00F0FF, 0 0 120px #B026FF, inset 0 0 45px #B026FF;
+      }
+    }
+    @keyframes orbPulseStandby {
+      0%, 100% {
+        transform: scale(0.97);
+        box-shadow: 0 0 25px rgba(176, 38, 255, 0.45), inset 0 0 20px rgba(0, 102, 255, 0.35);
+      }
+      50% {
+        transform: scale(1.02);
+        box-shadow: 0 0 38px rgba(0, 240, 255, 0.45), inset 0 0 26px rgba(176, 38, 255, 0.45);
+      }
+    }
+    .orb-active {
+      background: radial-gradient(circle at 35% 35%, #00F0FF 0%, #0066FF 45%, #B026FF 85%, #120924 100%);
+      animation: orbPulseActive 1.8s infinite ease-in-out;
+    }
+    .orb-standby {
+      background: radial-gradient(circle at 35% 35%, #371F66 0%, #161E3D 60%, #090A12 100%);
+      animation: orbPulseStandby 3.2s infinite ease-in-out;
+    }
+    @keyframes ringRotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .cyber-ring {
+      border: 2px dashed rgba(0, 240, 255, 0.55);
+      animation: ringRotate 16s linear infinite;
+    }
+    .wave-bar {
+      transition: height 0.13s ease;
+      background: linear-gradient(180deg, #00F0FF 0%, #B026FF 100%);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-4 sm:p-6 select-none">
+
+  <!-- 1. MINIMAL TOP BAR: JARVIS Status + Floating Mode Preview Button + Single Settings Gear Button -->
+  <header class="max-w-xl w-full mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span id="statusDot" class="w-3 h-3 rounded-full bg-[#00F0FF] shadow-[0_0_12px_#00F0FF]"></span>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="mono text-base sm:text-lg font-bold tracking-wider text-white">JARVIS</h1>
+          <span id="activeElementBadge" class="mono text-[10px] px-2 py-0.5 rounded-full bg-[#00FF9D]/15 border border-[#00FF9D]/50 text-[#00FF9D]">Element 1 Active</span>
+        </div>
+        <p id="statusSubtext" class="text-xs text-gray-400">Standby — "Hey Jarvis" বলুন বা মাঝখানের বাটনে ট্যাপ করুন</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- Toggle Home/Lock Screen Floating Pill Demo -->
+      <button id="floatingModeBtn" type="button" title="হোম স্ক্রিন ফ্লোটিং মোড দেখুন" class="px-3 py-2 rounded-full bg-[#111424] border border-[#00F0FF]/40 text-[#00F0FF] text-xs font-medium hover:bg-[#00F0FF]/15 transition">
+        📱 Floating Mode
+      </button>
+
+      <!-- Single Settings Button -->
+      <button id="openSettingsBtn" type="button" aria-label="Open Settings" class="w-10 h-10 rounded-full bg-[#111424] border border-[#B026FF]/50 flex items-center justify-center text-[#00F0FF] hover:bg-[#B026FF]/20 transition shadow-[0_0_15px_rgba(176,38,255,0.25)]">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Floating Overlay Pill Simulation Banner (Hidden by default) -->
+  <div id="floatingOverlayBanner" class="hidden max-w-md w-full mx-auto mt-3">
+    <div class="rounded-full bg-[#0A0C16]/95 border-2 border-[#00F0FF] px-5 py-2.5 flex items-center justify-between shadow-[0_0_30px_rgba(0,240,255,0.4)]">
+      <div class="flex items-center gap-2.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-[#00FF9D] animate-ping"></span>
+        <span class="mono text-xs font-bold text-[#00F0FF]">🎙 JARVIS Floating Icon (স্ক্রিন দেখে বাংলায় ও ইংরেজিতে পড়ছে)</span>
+      </div>
+      <button id="closeFloatingBannerBtn" type="button" class="text-xs text-gray-400 hover:text-white">✕</button>
+    </div>
+  </div>
+
+  <!-- 2. CENTER: ONLY THE BIG GLOWING LISTENING ORB + WAVEFORM + CLEAN LIVE RESPONSE -->
+  <main class="max-w-xl w-full mx-auto my-auto flex flex-col items-center justify-center py-6">
+    <div class="relative flex items-center justify-center w-60 h-60 sm:w-64 sm:h-64">
+      <div class="cyber-ring absolute inset-0 rounded-full pointer-events-none"></div>
+      <div class="absolute inset-4 rounded-full border border-[#B026FF]/40 pointer-events-none"></div>
+
+      <!-- Center Glowing Listening Button -->
+      <button id="mainOrbBtn" type="button" aria-label="Start or Stop Listening" class="orb-standby w-44 h-44 sm:w-48 sm:h-48 rounded-full flex flex-col items-center justify-center cursor-pointer relative z-10 focus:outline-none">
+        <svg class="w-12 h-12 text-white mb-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.85)]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 01-14 0v-2M12 19v4m-4 0h8" />
+        </svg>
+        <span id="orbLabel" class="mono text-xs sm:text-sm font-bold text-white tracking-widest">LISTENING</span>
+      </button>
+    </div>
+
+    <!-- Minimal Animated Sound Waveform -->
+    <div id="waveContainer" class="w-56 h-9 mt-6 flex items-center justify-center gap-1.5">
+    </div>
+
+    <!-- Clean Live Subtitle Text -->
+    <div class="mt-5 text-center px-4 max-w-lg">
+      <p id="userHeardLine" class="text-xs text-[#00F0FF] mb-1.5 min-h-[18px]"></p>
+      <p id="jarvisReplyLine" class="text-sm sm:text-base text-white font-medium leading-relaxed">
+        "জি Boss, আমি জার্ভিস। আমাকে যেকোনো প্রশ্ন করুন অথবা বলুন: 'আমার স্ক্রিনের টেক্সটটা বাংলায় পড়ো' কিংবা 'এই টেক্সটটা ইংলিশে পড়ো'!"
+      </p>
+    </div>
+  </main>
+
+  <!-- 3. BOTTOM: ONLY MESSAGE INPUT + SEND BUTTON -->
+  <footer class="max-w-xl w-full mx-auto">
+    <form id="messageForm" class="flex items-center gap-2.5">
+      <input
+        id="messageInput"
+        type="text"
+        placeholder="যেকোনো প্রশ্ন বা বলুন: 'স্ক্রিনের টেক্সটটা বাংলায় পড়ো' / 'ইংলিশে পড়ো'..."
+        class="flex-1 bg-[#0D0E17] border border-[#B026FF]/50 rounded-full px-5 py-3.5 text-xs sm:text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00F0FF] shadow-[0_0_20px_rgba(0,0,0,0.6)]"
+      />
+      <button
+        type="submit"
+        aria-label="Send Message"
+        class="w-12 h-12 rounded-full bg-gradient-to-r from-[#B026FF] to-[#0066FF] flex items-center justify-center text-white hover:opacity-90 transition shadow-[0_0_18px_rgba(176,38,255,0.45)]"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </button>
+    </form>
+  </footer>
+
+  <!-- 4. SETTINGS MODAL (Includes 3-Element Failover + Sample Mobile Screen Text for Testing Screen Reading/Translation) -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="max-w-lg w-full rounded-3xl bg-[#0D0E17] border border-[#00F0FF]/60 p-5 sm:p-6 shadow-[0_0_50px_rgba(0,240,255,0.25)] max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3 mb-4">
+        <div>
+          <h2 class="mono text-sm sm:text-base font-bold text-[#00F0FF]">⚙ JARVIS SETTINGS</h2>
+          <p class="text-[11px] text-gray-400">৩-স্তরের অটোমেটিক ভয়েস ফলব্যাক, স্ক্রিন রিডার ও ভাষা সেটিংস</p>
+        </div>
+        <button id="closeSettingsBtn" type="button" class="w-8 h-8 rounded-full bg-gray-800 text-gray-300 hover:text-white flex items-center justify-center font-bold">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- 3-Element Automatic Voice Failover Configuration -->
+        <div class="p-3.5 rounded-2xl bg-[#131524] border border-[#00FF9D]/40 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-[#00FF9D]">🎙 ৩-টি Voice Element (Automatic Fallback System)</span>
+            <span id="modalActiveElementTag" class="mono text-[10px] px-2 py-0.5 rounded bg-[#00FF9D]/20 text-[#00FF9D]">Element 1 সচল</span>
+          </div>
+
+          <div>
+            <label for="key1Input" class="block text-[11px] text-gray-300 mb-1">Element 1 — ElevenLabs API Key #1:</label>
+            <input id="key1Input" type="text" value="" placeholder="নিজের ElevenLabs API Key বসান (ঐচ্ছিক)" class="w-full bg-[#090A12] border border-gray-700 rounded-xl px-3 py-2 text-xs text-[#00F0FF] mono focus:outline-none focus:border-[#00F0FF]" />
+          </div>
+
+          <div>
+            <label for="key2Input" class="block text-[11px] text-gray-300 mb-1">Element 2 — ElevenLabs API Key #2:</label>
+            <input id="key2Input" type="text" value="" placeholder="নিজের ElevenLabs API Key বসান (ঐচ্ছিক)" class="w-full bg-[#090A12] border border-gray-700 rounded-xl px-3 py-2 text-xs text-[#00F0FF] mono focus:outline-none focus:border-[#00F0FF]" />
+          </div>
+
+          <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#090A12] border border-[#00F0FF]/40">
+            <div>
+              <p class="font-semibold text-[#00F0FF]">Element 3 — ফ্রি জার্ভিস নিউরাল ভয়েস (আগের ভয়েস)</p>
+              <p class="text-[10px] text-gray-400">আনলিমিটেড ফ্রি — উপরের দুটির ক্রেডিট শেষ হলে এটি নিজে থেকেই চলবে</p>
+            </div>
+            <span class="mono text-[10px] px-2 py-0.5 rounded bg-[#00F0FF]/20 text-[#00F0FF]">UNLIMITED</span>
+          </div>
+
+          <div>
+            <label for="preferredElementSelect" class="block text-[11px] text-gray-300 mb-1">কোন ভয়েসটি আগে ব্যবহার করতে চান?</label>
+            <select id="preferredElementSelect" class="w-full bg-[#090A12] border border-gray-700 rounded-xl px-3 py-2 text-xs text-white">
+              <option value="AUTO">Automatic Failover (Element 1 ➔ Element 2 ➔ Element 3 Free Voice)</option>
+              <option value="FREE_FIRST">শুধু জার্ভিসের ফ্রি ভয়েস (Element 3 — কোনো ক্রেডিট খরচ হবে না)</option>
+              <option value="KEY2_FIRST">Element 2 আগে (Element 2 ➔ Element 1 ➔ Element 3)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Simulated Mobile Screen Content (So user can test reading & translating screen text in preview!) -->
+        <div class="p-3.5 rounded-2xl bg-[#131524] border border-[#00F0FF]/40 space-y-2">
+          <label for="simulatedScreenText" class="block text-[11px] text-[#00F0FF] font-bold">📱 আপনার মোবাইলের স্ক্রিনে থাকা টেক্সট (Screen Vision টেস্ট করার জন্য):</label>
+          <p class="text-[10px] text-gray-400">ফোনে জার্ভিস সরাসরি আপনার স্ক্রিন (`AccessibilityService`) থেকে লেখা নেয়। প্রিভিউতে টেস্ট করার জন্য এখানে যেকোনো ইংরেজি বা বাংলা টেক্সট রাখতে পারেন:</p>
+          <textarea id="simulatedScreenText" rows="3" class="w-full bg-[#090A12] border border-gray-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#00F0FF]">Hello Boss! Your 4K video export is 85% complete. Client Rahul sent a message on WhatsApp: Please send the final color graded reel by 8 PM tonight. | বস, আগামীকাল সকাল ১০টায় নতুন প্রজেক্টের মিটিং আছে।</textarea>
+        </div>
+
+        <!-- ElevenLabs Voice Character & Language Selector -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="p-3 rounded-2xl bg-[#131524] border border-gray-800">
+            <label for="voiceCharSelect" class="block text-[11px] text-[#00F0FF] font-semibold mb-1">কণ্ঠস্বরের ধরন (Voice Tone):</label>
+            <select id="voiceCharSelect" class="w-full bg-[#090A12] border border-gray-700 rounded-xl px-2.5 py-2 text-xs text-white">
+              <option value="JBFqnCBsd6RMkjVDRZzb">George (Warm Jarvis Male)</option>
+              <option value="pNInz6obpgDQGcFmaJgB">Adam (Deep Cinematic Male)</option>
+              <option value="onwK4e9ZLuTAKqWW03F9">Daniel (Crisp Assistant)</option>
+              <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Clear Female)</option>
+            </select>
+          </div>
+
+          <div class="p-3 rounded-2xl bg-[#131524] border border-gray-800">
+            <label for="langSelect" class="block text-[11px] text-[#B026FF] font-semibold mb-1">কথা বলার ভাষা (বাংলা / हिन्दी):</label>
+            <select id="langSelect" class="w-full bg-[#090A12] border border-gray-700 rounded-xl px-2.5 py-2 text-xs text-white">
+              <option value="bn-BD">বাংলা (Bangla — ডিফল্ট)</option>
+              <option value="hi-IN">हिन्दी (Hindi — ন্যাচারাল হিন্দি)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Speed Control -->
+        <div class="p-3 rounded-2xl bg-[#131524] border border-gray-800">
+          <div class="flex justify-between text-gray-300 mb-1">
+            <span>কথার গতি (Voice Speed)</span>
+            <span id="speedValueText" class="mono text-[#00F0FF]">1.00x</span>
+          </div>
+          <input id="speedRange" type="range" min="0.8" max="1.3" step="0.05" value="1.0" class="w-full accent-[#00F0FF] cursor-pointer" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button id="testVoiceFromSettingsBtn" type="button" class="px-4 py-2 rounded-xl bg-[#00FF9D] text-[#050508] font-bold text-xs hover:opacity-90 transition">
+            🔊 ভয়েস টেস্ট করুন
+          </button>
+          <button id="saveSettingsBtn" type="button" class="px-5 py-2 rounded-xl bg-gradient-to-r from-[#0066FF] to-[#B026FF] text-white font-bold text-xs hover:opacity-90 transition">
+            Save & Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      isListeningSession: false,
+      key1: localStorage.getItem('jarvis_key1') || '',
+      key2: localStorage.getItem('jarvis_key2') || '',
+      preferredMode: localStorage.getItem('jarvis_preferredMode') || 'AUTO',
+      activeElementLabel: 'Element 1 Active',
+      voiceId: localStorage.getItem('jarvis_voiceId') || 'JBFqnCBsd6RMkjVDRZzb',
+      locale: localStorage.getItem('jarvis_locale') || 'bn-BD',
+      speechRate: parseFloat(localStorage.getItem('jarvis_speechRate') || '1.0'),
+      audioCtx: null,
+      currentAudio: null,
+      chatHistory: []
+    };
+
+    // DOM Elements
+    const statusDot = document.getElementById('statusDot');
+    const activeElementBadge = document.getElementById('activeElementBadge');
+    const statusSubtext = document.getElementById('statusSubtext');
+    const floatingModeBtn = document.getElementById('floatingModeBtn');
+    const floatingOverlayBanner = document.getElementById('floatingOverlayBanner');
+    const closeFloatingBannerBtn = document.getElementById('closeFloatingBannerBtn');
+
+    const mainOrbBtn = document.getElementById('mainOrbBtn');
+    const orbLabel = document.getElementById('orbLabel');
+    const waveContainer = document.getElementById('waveContainer');
+    const userHeardLine = document.getElementById('userHeardLine');
+    const jarvisReplyLine = document.getElementById('jarvisReplyLine');
+
+    const messageForm = document.getElementById('messageForm');
+    const messageInput = document.getElementById('messageInput');
+
+    const openSettingsBtn = document.getElementById('openSettingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const testVoiceFromSettingsBtn = document.getElementById('testVoiceFromSettingsBtn');
+    const modalActiveElementTag = document.getElementById('modalActiveElementTag');
+    const key1Input = document.getElementById('key1Input');
+    const key2Input = document.getElementById('key2Input');
+    const preferredElementSelect = document.getElementById('preferredElementSelect');
+    const simulatedScreenText = document.getElementById('simulatedScreenText');
+    const voiceCharSelect = document.getElementById('voiceCharSelect');
+    const langSelect = document.getElementById('langSelect');
+    const speedRange = document.getElementById('speedRange');
+    const speedValueText = document.getElementById('speedValueText');
+
+    // Restore saved settings into the Settings form (Android app: stored only on this phone)
+    try {
+      key1Input.value = state.key1;
+      key2Input.value = state.key2;
+      preferredElementSelect.value = state.preferredMode;
+      voiceCharSelect.value = state.voiceId;
+      langSelect.value = state.locale;
+      speedRange.value = state.speechRate;
+      speedValueText.textContent = state.speechRate.toFixed(2) + 'x';
+      const savedScreen = localStorage.getItem('jarvis_screenText');
+      if (savedScreen) simulatedScreenText.value = savedScreen;
+    } catch (e) {}
+
+    function persistSettings() {
+      try {
+        localStorage.setItem('jarvis_key1', state.key1 || '');
+        localStorage.setItem('jarvis_key2', state.key2 || '');
+        localStorage.setItem('jarvis_preferredMode', state.preferredMode);
+        localStorage.setItem('jarvis_voiceId', state.voiceId);
+        localStorage.setItem('jarvis_locale', state.locale);
+        localStorage.setItem('jarvis_speechRate', String(state.speechRate));
+        localStorage.setItem('jarvis_screenText', simulatedScreenText.value || '');
+      } catch (e) {}
+    }
+
+    let recognition = null;
+    const waveBars = [];
+
+    for (let i = 0; i < 18; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'wave-bar w-1.5 h-2';
+      waveContainer.appendChild(bar);
+      waveBars.push(bar);
+    }
+
+    setInterval(() => {
+      waveBars.forEach((bar) => {
+        if (state.isListeningSession) {
+          bar.style.height = (Math.floor(Math.random() * 24) + 6) + 'px';
+        } else {
+          bar.style.height = '6px';
+        }
+      });
+    }, 130);
+
+    function ensureAudioContext() {
+      if (!state.audioCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) state.audioCtx = new AudioCtx();
+      }
+      if (state.audioCtx && state.audioCtx.state === 'suspended') {
+        state.audioCtx.resume();
+      }
+    }
+
+    function playSubtleChime() {
+      try {
+        ensureAudioContext();
+        if (!state.audioCtx) return;
+        const ctx = state.audioCtx;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(560, now);
+        osc.frequency.exponentialRampToValueAtTime(840, now + 0.12);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+        osc.start(now);
+        osc.stop(now + 0.16);
+      } catch (e) {}
+    }
+
+    function setOrbState(active, subtitle) {
+      state.isListeningSession = active;
+      statusSubtext.textContent = subtitle;
+      if (active) {
+        mainOrbBtn.classList.remove('orb-standby');
+        mainOrbBtn.classList.add('orb-active');
+        orbLabel.textContent = 'LISTENING';
+        statusDot.className = 'w-3 h-3 rounded-full bg-[#00FF9D] shadow-[0_0_12px_#00FF9D]';
+      } else {
+        mainOrbBtn.classList.remove('orb-active');
+        mainOrbBtn.classList.add('orb-standby');
+        orbLabel.textContent = 'HEY JARVIS';
+        statusDot.className = 'w-3 h-3 rounded-full bg-[#00F0FF] shadow-[0_0_12px_#00F0FF]';
+      }
+    }
+
+    function sanitizePronunciation(text) {
+      return text
+        .replace(/বসকে/g, 'Boss-কে')
+        .replace(/বসের/g, 'Boss-এর')
+        .replace(/বস([,।!?\s]|$)/g, 'Boss$1')
+        .replace(/বসা/g, 'Boss');
+    }
+
+    function updateActiveElementIndicators(label) {
+      state.activeElementLabel = label;
+      activeElementBadge.textContent = label;
+      modalActiveElementTag.textContent = label;
+    }
+
+    /**
+     * ৩-টি Voice Element-এর Automatic Fallback System:
+     * Element 1 (Key #1) -> Element 2 (Key #2) -> Element 3 (Free Jarvis Neural Voice)
+     */
+    async function speakWithThreeElementFailover(rawText, forceLangCode) {
+      const cleanText = sanitizePronunciation(rawText);
+      jarvisReplyLine.textContent = `"${cleanText}"`;
+      playSubtleChime();
+
+      if (state.currentAudio) {
+        try {
+          state.currentAudio.pause();
+          state.currentAudio = null;
+        } catch (e) {}
+      }
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+      }
+
+      if (state.preferredMode === 'FREE_FIRST') {
+        updateActiveElementIndicators('Element 3: Free Neural Voice');
+        playElement3FreeNeuralVoice(cleanText, forceLangCode);
+        return;
+      }
+
+      const keyOrder = state.preferredMode === 'KEY2_FIRST'
+        ? [
+            { idx: 2, key: state.key2, label: 'Element 2 (ElevenLabs #2)' },
+            { idx: 1, key: state.key1, label: 'Element 1 (ElevenLabs #1)' }
+          ]
+        : [
+            { idx: 1, key: state.key1, label: 'Element 1 (ElevenLabs #1)' },
+            { idx: 2, key: state.key2, label: 'Element 2 (ElevenLabs #2)' }
+          ];
+
+      for (const item of keyOrder) {
+        if (!item.key) continue;
+        const ok = await tryElevenLabsKey(item.key, cleanText);
+        if (ok) {
+          updateActiveElementIndicators(item.label);
+          return;
+        }
+      }
+
+      updateActiveElementIndicators('Element 3: Free Neural Voice');
+      playElement3FreeNeuralVoice(cleanText, forceLangCode);
+    }
+
+    async function tryElevenLabsKey(apiKey, text) {
+      const models = ['eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5'];
+      for (const modelId of models) {
+        try {
+          const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${state.voiceId}`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': apiKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg'
+            },
+            body: JSON.stringify({
+              text: text,
+              model_id: modelId,
+              voice_settings: { stability: 0.52, similarity_boost: 0.82 }
+            })
+          });
+
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.playbackRate = state.speechRate;
+            state.currentAudio = audio;
+            audio.onended = () => URL.revokeObjectURL(url);
+            await audio.play();
+            return true;
+          }
+        } catch (e) {}
+      }
+      return false;
+    }
+
+    function playElement3FreeNeuralVoice(cleanText, forceLangCode) {
+      const targetLang = forceLangCode || (state.locale.startsWith('hi') ? 'hi' : 'bn');
+      const shortText = cleanText.slice(0, 195);
+      const streamUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${targetLang}&q=${encodeURIComponent(shortText)}`;
+
+      const audio = new Audio(streamUrl);
+      audio.playbackRate = state.speechRate;
+      state.currentAudio = audio;
+
+      audio.onerror = () => {
+        if (window.AndroidJarvis && window.AndroidJarvis.speak) {
+          try { window.AndroidJarvis.speak(cleanText, targetLang); return; } catch (e) {}
+        }
+        if ('speechSynthesis' in window) {
+          const u = new SpeechSynthesisUtterance(cleanText);
+          u.lang = targetLang === 'en' ? 'en-US' : state.locale;
+          u.rate = state.speechRate;
+          window.speechSynthesis.speak(u);
+        }
+      };
+
+      audio.play().catch(() => audio.onerror());
+    }
+
+    /**
+     * Screen Intelligence: স্ক্রিনের টেক্সট দেখা, বাংলায় অনুবাদ করে পড়া বা ইংরেজিতে অনুবাদ করে পড়া
+     */
+    function isScreenReadOrTranslateCommand(lower) {
+      const hasScreenOrTextWord = lower.includes('স্ক্রিন') ||
+        lower.includes('টেক্সট') ||
+        lower.includes('লেখা') ||
+        lower.includes('screen') ||
+        lower.includes('text') ||
+        lower.includes('পড়ে শোনাও') ||
+        lower.includes('পড়ো') ||
+        lower.includes('পড়ো') ||
+        lower.includes('অনুবাদ') ||
+        lower.includes('translate');
+
+      const hasActionWord = lower.includes('পড়') ||
+        lower.includes('পড়') ||
+        lower.includes('দেখ') ||
+        lower.includes('বল') ||
+        lower.includes('read') ||
+        lower.includes('translate') ||
+        lower.includes('অনুবাদ') ||
+        lower.includes('বাংলায়') ||
+        lower.includes('ইংলিশে') ||
+        lower.includes('ইংরেজিতে');
+
+      return hasScreenOrTextWord && hasActionWord;
+    }
+
+    async function readAndTranslateMobileScreen(rawInput, lower) {
+      statusSubtext.textContent = 'Reading & Translating Mobile Screen...';
+      let screenContent = (simulatedScreenText.value || '').trim();
+      if (window.AndroidJarvis && window.AndroidJarvis.getScreenText) {
+        try {
+          const nativeText = (window.AndroidJarvis.getScreenText() || '').trim();
+          if (nativeText.length > 10) screenContent = nativeText;
+        } catch (e) {}
+      }
+
+      const wantsEnglish = lower.includes('ইংলিশে') ||
+        lower.includes('ইংরেজিতে') ||
+        lower.includes('in english') ||
+        lower.includes('english এ') ||
+        lower.includes('english-এ');
+
+      const wantsHindi = lower.includes('হিন্দিতে') ||
+        lower.includes('in hindi') ||
+        lower.includes('हिंदी में');
+
+      const tlCode = wantsEnglish ? 'en' : (wantsHindi ? 'hi' : 'bn');
+
+      try {
+        const gtUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tlCode}&dt=t&q=${encodeURIComponent(screenContent)}`;
+        const resp = await fetch(gtUrl);
+        if (resp.ok) {
+          const data = await resp.json();
+          let translated = '';
+          if (Array.isArray(data[0])) {
+            data[0].forEach((seg) => {
+              if (seg && seg[0]) translated += seg[0];
+            });
+          }
+          translated = translated.trim();
+          if (translated) {
+            setOrbState(true, 'Listening...');
+            if (wantsEnglish) {
+              speakWithThreeElementFailover(`Boss, reading your mobile screen in English: ${translated}`, 'en');
+            } else if (wantsHindi) {
+              speakWithThreeElementFailover(`Boss, आपकी मोबाइल स्क्रीन पर लिखा है: ${translated}`, 'hi');
+            } else {
+              speakWithThreeElementFailover(`Boss, আপনার মোবাইলের স্ক্রিনে লেখা আছে: ${translated}`, 'bn');
+            }
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Fallback direct screen read
+      setOrbState(true, 'Listening...');
+      speakWithThreeElementFailover(`Boss, আপনার মোবাইলের স্ক্রিনে লেখা আছে: ${screenContent}`);
+    }
+
+    // Main Command & Question Processor
+    async function processBossInput(rawInput) {
+      const input = rawInput.trim();
+      if (!input) return;
+
+      userHeardLine.textContent = `Boss: "${input}"`;
+      const lower = input.toLowerCase();
+
+      // 1. Stop Command
+      if (lower.includes('অফ হয়ে যাও') || lower.includes('ঘুমিয়ে পড়ো') || lower.includes('stop listening') || lower.includes('চুপ থাকো')) {
+        setOrbState(false, 'Standby — "Hey Jarvis" বললেই আবার চালু হবে');
+        speakWithThreeElementFailover('ঠিক আছে Boss, আমি এখন নীরব মোডে থাকছি।');
+        return;
+      }
+
+      setOrbState(true, 'Listening — সরাসরি কথা বলুন Boss');
+
+      // 2. ONLY say "জি Boss, আমি আপনার সাথেই আছি" when the user explicitly asks "তুমি আছো?"
+      if (lower === 'তুমি আছো' || lower === 'তুমি কি আছো' || lower === 'জার্ভিস তুমি আছো' || lower === 'আছো?' || lower === 'তুমি আছো?' || lower === 'are you there') {
+        speakWithThreeElementFailover('জি Boss, আমি আপনার সাথেই আছি। বলুন?');
+        return;
+      }
+
+      // 3. Wake Word Only -> Short crisp reply
+      if (lower === 'hey jarvis' || lower === 'হেই জার্ভিস' || lower === 'হে জার্ভিস' || lower === 'জার্ভিস' || lower === 'jarvis') {
+        const reply = state.locale.startsWith('hi') ? 'जी Boss, बताइए?' : 'জি Boss, বলুন?';
+        speakWithThreeElementFailover(reply);
+        return;
+      }
+
+      // 4. Mobile Screen Reading & Translation (Bangla <-> English)
+      if (isScreenReadOrTranslateCommand(lower)) {
+        await readAndTranslateMobileScreen(input, lower);
+        return;
+      }
+
+      // 5. Explicit Phone Controls
+      if (lower.includes('লক করে দাও') || lower.includes('ফোন লক') || lower.includes('lock phone')) {
+        speakWithThreeElementFailover('ফোনের স্ক্রিন নিরাপদভাবে লক করে দিচ্ছি Boss।');
+        if (window.AndroidJarvis && window.AndroidJarvis.lockPhone) {
+          setTimeout(() => { try { window.AndroidJarvis.lockPhone(); } catch (e) {} }, 1200);
+        }
+        return;
+      }
+      if (lower.includes('ফ্ল্যাশলাইট') || lower.includes('টর্চ') || lower.includes('flashlight')) {
+        const turnOn = !lower.includes('বন্ধ') && !lower.includes('off');
+        if (window.AndroidJarvis && window.AndroidJarvis.toggleFlashlight) {
+          try { window.AndroidJarvis.toggleFlashlight(turnOn); } catch (e) {}
+        }
+        speakWithThreeElementFailover(turnOn ? 'ফোনের ফ্ল্যাশলাইট অন করে দিয়েছি Boss।' : 'ফ্ল্যাশলাইট অফ করে দিয়েছি Boss।');
+        return;
+      }
+      if (lower.includes('ওপেন কর') || lower.includes('খোলো') || lower.includes('খুলো') || lower.startsWith('open ')) {
+        const appName = input.replace(/ওপেন করো|ওপেন কর|খোলো|খুলো|open/gi, '').trim() || 'App';
+        speakWithThreeElementFailover(`${appName} ওপেন করে দিচ্ছি Boss।`);
+        if (window.AndroidJarvis && window.AndroidJarvis.openApp) {
+          setTimeout(() => { try { window.AndroidJarvis.openApp(appName); } catch (e) {} }, 900);
+        }
+        return;
+      }
+
+      // 6. Advanced AI Intelligence with Screen Context (Never says "আমি আপনার কথা বুঝতে পেরেছি" or "আমি আপনার সাথেই আছি"!)
+      statusSubtext.textContent = 'Thinking...';
+      const screenContext = (simulatedScreenText.value || '').trim();
+      const isHindi = state.locale.startsWith('hi');
+      const sysInstruction = isHindi
+        ? `तुम JARVIS (जार्विस) हो, उपयोगकर्ता के बुद्धिमान व्यक्तिगत AI सहायक। उपयोगकर्ता को 'Boss' कहो। तुम्हारे पास उपयोगकर्ता की मोबाइल स्क्रीन पढ़ने की पूरी क्षमता है (स्क्रीन टेक्स्ट: "${screenContext}")। कभी यह मत कहना कि 'मैं आपकी स्क्रीन नहीं देख सकता' और कभी भी 'जी Boss मैं आपके साथ हूँ' बार-बार मत बोलना। हमेशा 1 से 3 वाक्यों में सीधा और सटीक उत्तर दो।`
+        : `তুমি JARVIS (জার্ভিস), ব্যবহারকারীর অত্যন্ত বুদ্ধিমান ব্যক্তিগত AI সহকারী। ব্যবহারকারীকে 'Boss' বলে সম্বোধন করবে (ইংরেজি বানানে 'Boss' লিখবে)। তোমার কাছে ব্যবহারকারীর মোবাইলের স্ক্রিন দেখার ও পড়ার সম্পূর্ণ ক্ষমতা আছে (বর্তমান স্ক্রিনের লেখা: "${screenContext}")। কখনোই বলবে না যে 'আমি আপনার মোবাইলের স্ক্রিন দেখতে বা টেক্সট পড়তে পারি না', এবং অহেতুক 'জি Boss আমি আপনার সাথেই আছি' বারবার বলবে না। যেকোনো প্রশ্নের একদম সরাসরি, সঠিক ও মানুষের মতো সাবলীল বাংলায় ১ থেকে ৩ বাক্যে উত্তর দাও।`;
+
+      try {
+        const messages = [
+          { role: 'system', content: sysInstruction },
+          ...state.chatHistory.slice(-6),
+          { role: 'user', content: input }
+        ];
+
+        const resp = await fetch('https://text.pollinations.ai/openai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'openai',
+            messages: messages,
+            temperature: 0.7
+          })
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          let reply = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+          reply = sanitizePronunciation(reply.trim());
+          if (reply) {
+            state.chatHistory.push({ role: 'user', content: input });
+            state.chatHistory.push({ role: 'assistant', content: reply });
+            setOrbState(true, 'Listening...');
+            speakWithThreeElementFailover(reply);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Secondary GET AI Endpoint
+      try {
+        const getUrl = 'https://text.pollinations.ai/' + encodeURIComponent(sysInstruction + '\nপ্রশ্ন: ' + input);
+        const getResp = await fetch(getUrl);
+        if (getResp.ok) {
+          const textReply = sanitizePronunciation((await getResp.text()).trim());
+          if (textReply) {
+            setOrbState(true, 'Listening...');
+            speakWithThreeElementFailover(textReply);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Third Backup: Translate/Answer via GTX if Pollinations is temporarily slow
+      if (lower.includes('কেমন আছ')) {
+        speakWithThreeElementFailover('আমি বেশ ভালো আছি Boss! আপনার কাজ কেমন চলছে?');
+      } else {
+        speakWithThreeElementFailover('Boss, আপনার ইন্টারনেট সংযোগটি একবার চেক করে নিলে আমি সাথে সাথে বিস্তারিত উত্তর দিতে পারব।');
+      }
+    }
+
+    // Android অ্যাপের ভেতরে native মাইক থেকে শোনার ব্রিজ (MainActivity.kt -> AndroidJarvis)
+    window.__jarvisNativeResult = function (text) {
+      if (recognition && recognition.onresult) {
+        recognition.onresult({ results: [[{ transcript: text }]] });
+      }
+      if (recognition && recognition.onend) setTimeout(() => recognition.onend(), 60);
+    };
+    window.__jarvisNativeError = function () {
+      if (recognition && recognition.onend) setTimeout(() => recognition.onend(), 400);
+    };
+    window.__jarvisWake = function () {
+      if (!state.isListeningSession) mainOrbBtn.click();
+    };
+
+    function NativeRecognition() {
+      this.lang = state.locale;
+      this.continuous = false;
+      this.interimResults = false;
+      this.onresult = null;
+      this.onend = null;
+    }
+    NativeRecognition.prototype.start = function () {
+      if (window.AndroidJarvis && window.AndroidJarvis.startSpeechRecognition) {
+        window.AndroidJarvis.startSpeechRecognition(this.lang || state.locale);
+      }
+    };
+    NativeRecognition.prototype.stop = function () {
+      if (window.AndroidJarvis && window.AndroidJarvis.stopSpeechRecognition) {
+        try { window.AndroidJarvis.stopSpeechRecognition(); } catch (e) {}
+      }
+      if (this.onend) setTimeout(() => this.onend(), 60);
+    };
+
+    function initWebSpeech() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition ||
+        ((window.AndroidJarvis && window.AndroidJarvis.startSpeechRecognition) ? NativeRecognition : null);
+      if (!SpeechRec) return;
+      recognition = new SpeechRec();
+      recognition.lang = state.locale;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.trim();
+        if (transcript) processBossInput(transcript);
+      };
+
+      recognition.onend = () => {
+        if (state.isListeningSession) {
+          try {
+            recognition.lang = state.locale;
+            recognition.start();
+          } catch (e) {}
+        }
+      };
+    }
+
+    // Event Listeners
+    mainOrbBtn.addEventListener('click', () => {
+      ensureAudioContext();
+      if (state.isListeningSession) {
+        setOrbState(false, 'Standby — "Hey Jarvis" বলুন বা ট্যাপ করুন');
+        if (recognition) {
+          try { recognition.stop(); } catch (e) {}
+        }
+        speakWithThreeElementFailover('ঠিক আছে Boss, আমি এখন নীরব মোডে থাকছি।');
+      } else {
+        setOrbState(true, 'Listening — সরাসরি কথা বলুন Boss');
+        if (recognition) {
+          try {
+            recognition.lang = state.locale;
+            recognition.start();
+          } catch (e) {}
+        }
+        const greet = state.locale.startsWith('hi') ? 'जी Boss, बताइए?' : 'জি Boss, বলুন?';
+        speakWithThreeElementFailover(greet);
+      }
+    });
+
+    messageForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      ensureAudioContext();
+      const val = messageInput.value.trim();
+      if (!val) return;
+      messageInput.value = '';
+      processBossInput(val);
+    });
+
+    floatingModeBtn.addEventListener('click', () => {
+      ensureAudioContext();
+      floatingOverlayBanner.classList.toggle('hidden');
+      if (!floatingOverlayBanner.classList.contains('hidden')) {
+        setOrbState(true, 'Floating Overlay Active — স্ক্রিন দেখে বাংলায় ও ইংরেজিতে পড়ছে');
+        speakWithThreeElementFailover('জি Boss, আমি এখন আপনার স্ক্রিনের লেখাও সরাসরি দেখতে এবং বাংলা বা ইংরেজিতে অনুবাদ করে পড়ে শোনাতে পারব।');
+      }
+    });
+
+    closeFloatingBannerBtn.addEventListener('click', () => {
+      floatingOverlayBanner.classList.add('hidden');
+    });
+
+    openSettingsBtn.addEventListener('click', () => {
+      settingsModal.classList.remove('hidden');
+    });
+
+    function closeSettings() {
+      state.key1 = key1Input.value.trim();
+      state.key2 = key2Input.value.trim();
+      state.preferredMode = preferredElementSelect.value;
+      state.voiceId = voiceCharSelect.value;
+      state.locale = langSelect.value;
+      state.speechRate = parseFloat(speedRange.value);
+      persistSettings();
+      settingsModal.classList.add('hidden');
+    }
+
+    closeSettingsBtn.addEventListener('click', closeSettings);
+    saveSettingsBtn.addEventListener('click', closeSettings);
+
+    speedRange.addEventListener('input', () => {
+      state.speechRate = parseFloat(speedRange.value);
+      speedValueText.textContent = state.speechRate.toFixed(2) + 'x';
+    });
+
+    testVoiceFromSettingsBtn.addEventListener('click', () => {
+      ensureAudioContext();
+      state.key1 = key1Input.value.trim();
+      state.key2 = key2Input.value.trim();
+      state.preferredMode = preferredElementSelect.value;
+      state.voiceId = voiceCharSelect.value;
+      state.locale = langSelect.value;
+      readAndTranslateMobileScreen('স্ক্রিনের টেক্সটটা বাংলায় পড়ো', 'স্ক্রিনের টেক্সটটা বাংলায় পড়ো');
+    });
+
+    initWebSpeech();
+  </script>
+</body>
+</html>

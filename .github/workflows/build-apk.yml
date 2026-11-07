@@ -1,0 +1,55 @@
+name: Build JARVIS Android APK
+
+on:
+  push:
+    branches: ["main", "master", "arena/**"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout JARVIS Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Prepare Installable JARVIS.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+
+      - name: Upload Ready-to-Install JARVIS APK (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Android-APK
+          path: JARVIS.apk
+
+      # ফোন থেকে সরাসরি ডাউনলোডের জন্য Release-এ APK দেওয়া হয়:
+      # https://github.com/editorshamim4108-cmd/NEXU/releases/download/jarvis-latest/JARVIS.apk
+      - name: Publish APK to GitHub Release (direct download)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view jarvis-latest >/dev/null 2>&1 || \
+            gh release create jarvis-latest \
+              --title "JARVIS Android App — Latest APK" \
+              --notes "ফোনে JARVIS.apk ডাউনলোড করে ইনস্টল করুন। ইনস্টলের সময় 'Install unknown apps' অনুমতি চাইলে Allow দিন।"
+          gh release upload jarvis-latest JARVIS.apk --clobber
