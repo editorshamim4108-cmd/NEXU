@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="accessibility_service_description">NEXU আপনার ভয়েস নির্দেশ অনুযায়ী স্ক্রিনে অ্যাপ খোলা, স্ক্রল করা, মেসেজ লেখা এবং লেখা পড়ে শোনানোর জন্য এই অনুমতি ব্যবহার করে।</string>
+</resources>
